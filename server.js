@@ -15,31 +15,61 @@ const {
 // -------------------- PERSISTENCE --------------------
 const STATE_FILE = path.join(__dirname, "state.json");
 
-function safeReadState() {
-  try {
-    if (!fs.existsSync(STATE_FILE)) {
-      return {
-        music: { current: null, previous: null },
-        podcast: { current: null, previous: null },
-      };
-    }
-    const raw = fs.readFileSync(STATE_FILE, "utf8");
-    const parsed = JSON.parse(raw);
+/**
+ * State shape (v2):
+ * {
+ *   music:   { current: {item,is_playing,seen_at}|null, history: [{item,seen_at}, ...] },
+ *   podcast: { current: {item,is_playing,seen_at}|null, history: [{item,seen_at}, ...] }
+ * }
+ */
+function defaultState() {
+  return {
+    music: { current: null, history: [] },
+    podcast: { current: null, history: [] },
+  };
+}
+
+function migrateState(parsed) {
+  // If already v2, keep it
+  if (parsed?.music?.history && parsed?.podcast?.history) {
     return {
       music: {
-        current: parsed.music?.current ?? null,
-        previous: parsed.music?.previous ?? null,
+        current: parsed.music.current ?? null,
+        history: Array.isArray(parsed.music.history) ? parsed.music.history : [],
       },
       podcast: {
-        current: parsed.podcast?.current ?? null,
-        previous: parsed.podcast?.previous ?? null,
+        current: parsed.podcast.current ?? null,
+        history: Array.isArray(parsed.podcast.history) ? parsed.podcast.history : [],
       },
     };
+  }
+
+  // v1 compatibility: {music:{current,previous}, podcast:{current,previous}}
+  const state = defaultState();
+
+  const mCur = parsed?.music?.current ?? null;
+  const mPrev = parsed?.music?.previous ?? null;
+  if (mCur?.item) state.music.history.push({ item: mCur.item, seen_at: mCur.seen_at });
+  if (mPrev?.item) state.music.history.push({ item: mPrev.item, seen_at: mPrev.seen_at });
+  state.music.current = mCur?.item ? mCur : null;
+
+  const pCur = parsed?.podcast?.current ?? null;
+  const pPrev = parsed?.podcast?.previous ?? null;
+  if (pCur?.item) state.podcast.history.push({ item: pCur.item, seen_at: pCur.seen_at });
+  if (pPrev?.item) state.podcast.history.push({ item: pPrev.item, seen_at: pPrev.seen_at });
+  state.podcast.current = pCur?.item ? pCur : null;
+
+  return state;
+}
+
+function safeReadState() {
+  try {
+    if (!fs.existsSync(STATE_FILE)) return defaultState();
+    const raw = fs.readFileSync(STATE_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    return migrateState(parsed);
   } catch {
-    return {
-      music: { current: null, previous: null },
-      podcast: { current: null, previous: null },
-    };
+    return defaultState();
   }
 }
 
@@ -64,9 +94,9 @@ async function getAccessToken() {
       "Content-Type": "application/x-www-form-urlencoded",
       Authorization:
         "Basic " +
-        Buffer.from(
-          `${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`
-        ).toString("base64"),
+        Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString(
+          "base64"
+        ),
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
@@ -86,6 +116,7 @@ function formatItem(item) {
   if (item.type === "track") {
     return {
       kind: "track",
+      id: item.id,
       title: item.name,
       subtitle: item.artists?.map((a) => a.name).join(", ") ?? "",
       image: item.album?.images?.[0]?.url ?? null,
@@ -96,6 +127,7 @@ function formatItem(item) {
   if (item.type === "episode") {
     return {
       kind: "episode",
+      id: item.id,
       title: item.name,
       subtitle: item.show?.name ?? "",
       image: item.images?.[0]?.url ?? null,
@@ -114,7 +146,31 @@ function isEpisode(item) {
   return item && item.type === "episode";
 }
 
-function setCurrentAndPrevious(section, item, isPlaying, nowIso) {
+function forceNotPlaying(section) {
+  if (section?.current?.is_playing) {
+    section.current.is_playing = false;
+    return true;
+  }
+  return false;
+}
+
+function pushHistory(section, item, nowIso) {
+  if (!item?.id) return false;
+
+  const existingIdx = section.history.findIndex((h) => h?.item?.id === item.id);
+  if (existingIdx === 0) return false; // already most recent
+
+  // If exists later, remove it so we can re-add to front
+  if (existingIdx > -1) section.history.splice(existingIdx, 1);
+
+  section.history.unshift({ item, seen_at: nowIso });
+
+  // Keep a little extra so you can expand later; UI will show last 2
+  section.history = section.history.slice(0, 10);
+  return true;
+}
+
+function updateCurrent(section, item, isPlaying, nowIso) {
   let changed = false;
 
   const currentId = section.current?.item?.id ?? null;
@@ -122,37 +178,21 @@ function setCurrentAndPrevious(section, item, isPlaying, nowIso) {
 
   if (!newId) return { section, changed };
 
+  // Track "most recent" even for short listens (as soon as Spotify reports it)
+  changed = pushHistory(section, item, nowIso) || changed;
+
+  // Keep current pointer aligned with the latest item we saw
   if (!currentId || currentId !== newId) {
-    if (section.current?.item) {
-      section.previous = {
-        item: section.current.item,
-        seen_at: section.current.seen_at,
-      };
-    }
-
-    section.current = {
-      item,
-      is_playing: !!isPlaying,
-      seen_at: nowIso,
-    };
-
+    section.current = { item, is_playing: !!isPlaying, seen_at: nowIso };
     changed = true;
   } else {
-    if (section.current && section.current.is_playing !== !!isPlaying) {
+    if (section.current.is_playing !== !!isPlaying) {
       section.current.is_playing = !!isPlaying;
       changed = true;
     }
   }
 
   return { section, changed };
-}
-
-function forceNotPlaying(section) {
-  if (section?.current?.is_playing) {
-    section.current.is_playing = false;
-    return true;
-  }
-  return false;
 }
 
 // -------------------- POLLER --------------------
@@ -185,7 +225,7 @@ async function pollAndRemember() {
     let anyChanged = false;
 
     if (isTrack(item)) {
-      const out = setCurrentAndPrevious(music, item, isPlaying, nowIso);
+      const out = updateCurrent(music, item, isPlaying, nowIso);
       music = out.section;
       anyChanged = anyChanged || out.changed;
 
@@ -194,7 +234,7 @@ async function pollAndRemember() {
     }
 
     if (isEpisode(item)) {
-      const out = setCurrentAndPrevious(podcast, item, isPlaying, nowIso);
+      const out = updateCurrent(podcast, item, isPlaying, nowIso);
       podcast = out.section;
       anyChanged = anyChanged || out.changed;
 
@@ -214,27 +254,35 @@ setInterval(pollAndRemember, 5000);
 pollAndRemember();
 
 // -------------------- API --------------------
+function lastTwo(section) {
+  // Always return 2 items for the "Recent" list.
+  // If something is currently playing, exclude that item from "recent" so we don't duplicate it.
+  const liveId = section.current?.is_playing ? section.current?.item?.id : null;
+  const filtered = section.history.filter((h) => h?.item?.id && h.item.id !== liveId);
+  return filtered.slice(0, 2);
+}
+
 function sectionPayload(section, label) {
-  const current = section.current ?? null;
-  const previous = section.previous ?? null;
+  const isPlaying = !!section.current?.is_playing;
 
-  const isPlaying = !!current?.is_playing;
+  const playing =
+    isPlaying && section.current?.item
+      ? { item: formatItem(section.current.item), seen_at: section.current.seen_at }
+      : null;
 
-  const playingItem = isPlaying ? current : null;
+  const recent = lastTwo(section).map((h) => ({
+    item: formatItem(h.item),
+    seen_at: h.seen_at,
+  }));
 
-  const lastPlayedItem = isPlaying
-    ? (previous ?? null)
-    : (current ?? previous ?? null);
+  // If we have less than 2 in history (fresh install), pad with nulls so UI stays consistent.
+  while (recent.length < 2) recent.push(null);
 
   return {
     label,
     is_playing: isPlaying,
-    playing: playingItem
-      ? { item: formatItem(playingItem.item), seen_at: playingItem.seen_at }
-      : null,
-    last_played: lastPlayedItem
-      ? { item: formatItem(lastPlayedItem.item), seen_at: lastPlayedItem.seen_at }
-      : null,
+    playing,
+    recent, // always length 2 (items or null)
   };
 }
 
@@ -247,6 +295,17 @@ app.get("/api/status", (req, res) => {
 });
 
 // -------------------- PAGE --------------------
+
+// Simple HTML escaper for OG meta tags
+function escapeHtml(input) {
+  return String(input ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 app.get("/", (req, res) => {
   // ---- Dynamic Open Graph (iMessage/Slack/etc.) preview ----
   let previewTitle = "What is Henry listening to?";
@@ -257,18 +316,11 @@ app.get("/", (req, res) => {
   const livePodcast = podcast.current?.is_playing ? podcast.current : null;
 
   const live = liveMusic || livePodcast;
+  const lastKnown = music.history?.[0] || podcast.history?.[0] || null;
 
-  // Prefer: if not live, use most recent known item from either section
-  const lastKnown =
-    music.current ||
-    podcast.current ||
-    music.previous ||
-    podcast.previous ||
-    null;
-
-  function buildDesc(entry) {
-    if (!entry?.item) return previewDesc;
-    const it = entry.item;
+  function buildDesc(entryOrHistory) {
+    const it = entryOrHistory?.item;
+    if (!it) return previewDesc;
     if (it.type === "track") {
       const artists = it.artists?.map((a) => a.name).join(", ") ?? "";
       return artists ? `${it.name} — ${artists}` : it.name;
@@ -280,8 +332,8 @@ app.get("/", (req, res) => {
     return previewDesc;
   }
 
-  function pickImage(entry) {
-    const it = entry?.item;
+  function pickImage(entryOrHistory) {
+    const it = entryOrHistory?.item;
     return it?.album?.images?.[0]?.url || it?.images?.[0]?.url || null;
   }
 
@@ -345,31 +397,13 @@ app.get("/", (req, res) => {
       padding-bottom: calc(26px + env(safe-area-inset-bottom));
     }
 
-    header {
-      display: grid;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
+    header { display: grid; gap: 8px; margin-bottom: 14px; }
 
-    h1 {
-      margin: 0;
-      font-size: 26px;
-      line-height: 1.1;
-      letter-spacing: 0.2px;
-    }
+    h1 { margin: 0; font-size: 26px; line-height: 1.1; letter-spacing: 0.2px; }
 
-    .tagline {
-      margin: 0;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.35;
-    }
+    .tagline { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
 
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 14px;
-    }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
 
     @media (min-width: 900px) {
       .wrap { padding: 26px 18px 30px 18px; }
@@ -388,9 +422,7 @@ app.get("/", (req, res) => {
       position: relative;
     }
 
-    @media (min-width: 900px) {
-      .card { padding: 18px; }
-    }
+    @media (min-width: 900px) { .card { padding: 18px; } }
 
     .headerRow {
       display: flex;
@@ -400,16 +432,8 @@ app.get("/", (req, res) => {
       margin-bottom: 10px;
     }
 
-    .title {
-      margin: 0;
-      font-size: 16px;
-      font-weight: 850;
-      letter-spacing: 0.2px;
-    }
-
-    @media (min-width: 900px) {
-      .title { font-size: 18px; }
-    }
+    .title { margin: 0; font-size: 16px; font-weight: 850; letter-spacing: 0.2px; }
+    @media (min-width: 900px) { .title { font-size: 18px; } }
 
     .badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -426,10 +450,7 @@ app.get("/", (req, res) => {
       backdrop-filter: blur(6px);
     }
 
-    .live {
-      border-color: rgba(255,59,48,0.55);
-      box-shadow: 0 0 0 3px rgba(255,59,48,0.10);
-    }
+    .live { border-color: rgba(255,59,48,0.55); box-shadow: 0 0 0 3px rgba(255,59,48,0.10); }
 
     .dot {
       width: 8px; height: 8px; border-radius: 999px;
@@ -444,103 +465,40 @@ app.get("/", (req, res) => {
       100% { box-shadow: 0 0 0 0 rgba(255,59,48,0); }
     }
 
-    .eq {
-      display: inline-flex;
-      align-items: flex-end;
-      gap: 3px;
-      height: 14px;
-    }
+    .eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 14px; }
     .eq span {
-      width: 3px;
-      border-radius: 3px;
-      background: var(--accent);
-      animation: bounce 0.9s infinite ease-in-out;
-      opacity: 0.95;
+      width: 3px; border-radius: 3px; background: var(--accent);
+      animation: bounce 0.9s infinite ease-in-out; opacity: 0.95;
     }
     .eq span:nth-child(1) { height: 6px; animation-delay: 0s; }
     .eq span:nth-child(2) { height: 12px; animation-delay: 0.12s; }
     .eq span:nth-child(3) { height: 8px; animation-delay: 0.24s; }
     .eq span:nth-child(4) { height: 14px; animation-delay: 0.36s; }
-    @keyframes bounce {
-      0%, 100% { transform: scaleY(0.5); }
-      50% { transform: scaleY(1.15); }
-    }
+    @keyframes bounce { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.15); } }
 
-    .special {
-      margin: 6px 0 12px 0;
-      color: rgba(244,244,244,0.90);
-      font-size: 13px;
-      line-height: 1.35;
-    }
+    .special { margin: 6px 0 12px 0; color: rgba(244,244,244,0.90); font-size: 13px; line-height: 1.35; }
     .special strong { color: #fff; }
 
-    .subhead {
-      margin: 12px 0 6px 0;
-      font-size: 12px;
-      letter-spacing: 0.3px;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
+    .subhead { margin: 12px 0 6px 0; font-size: 12px; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted); }
 
-    .mediaRow {
-      display: grid;
-      grid-template-columns: 74px 1fr;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-
-    @media (min-width: 900px) {
-      .mediaRow { grid-template-columns: 88px 1fr; }
-    }
+    .mediaRow { display: grid; grid-template-columns: 74px 1fr; gap: 12px; align-items: center; margin-bottom: 6px; }
+    @media (min-width: 900px) { .mediaRow { grid-template-columns: 88px 1fr; } }
 
     .art {
-      width: 74px;
-      height: 74px;
-      border-radius: 14px;
-      object-fit: cover;
+      width: 74px; height: 74px; border-radius: 14px; object-fit: cover;
       background: rgba(255,255,255,0.08);
       border: 1px solid rgba(255,255,255,0.10);
     }
+    @media (min-width: 900px) { .art { width: 88px; height: 88px; border-radius: 16px; } }
 
-    @media (min-width: 900px) {
-      .art { width: 88px; height: 88px; border-radius: 16px; }
-    }
+    .name { margin: 0 0 4px 0; font-size: 16px; font-weight: 850; line-height: 1.2; }
+    .who { margin: 0; color: rgba(244,244,244,0.78); font-size: 13px; line-height: 1.3; }
 
-    .name {
-      margin: 0 0 4px 0;
-      font-size: 16px;
-      font-weight: 850;
-      line-height: 1.2;
-    }
+    a { color: var(--accent); text-decoration: none; font-weight: 800; display: inline-block; padding: 8px 0; }
 
-    .who {
-      margin: 0;
-      color: rgba(244,244,244,0.78);
-      font-size: 13px;
-      line-height: 1.3;
-    }
+    .empty { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
 
-    a {
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 800;
-      display: inline-block;
-      padding: 8px 0;
-    }
-
-    .empty {
-      margin: 0;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.35;
-    }
-
-    .hint {
-      margin: 14px 0 0 0;
-      color: var(--muted);
-      font-size: 13px;
-    }
+    .hint { margin: 14px 0 0 0; color: var(--muted); font-size: 13px; }
   </style>
 </head>
 <body>
@@ -556,11 +514,11 @@ app.get("/", (req, res) => {
     </div>
 
     <p class="hint">Auto-refreshes every 10 seconds.</p>
-  </div>
+
     <footer style="margin-top:24px;text-align:center;color:rgba(244,244,244,0.6);font-size:13px;">
       Made with ♥ by Henry
     </footer>
-
+  </div>
 
   <script>
     function badges(isPlaying) {
@@ -590,33 +548,33 @@ app.get("/", (req, res) => {
       \`;
     }
 
+    function renderRecentList(recent) {
+      // recent is always length 2, items can be null
+      return recent.map((entry, idx) => {
+        if (!entry || !entry.item) {
+          return \`
+            <div class="subhead">\${idx === 0 ? "Most recent" : "Second most recent"}</div>
+            <p class="empty">—</p>
+          \`;
+        }
+        const label = idx === 0 ? "Most recent" : "Second most recent";
+        return renderMini(entry, label);
+      }).join("");
+    }
+
     function renderSection(containerId, section) {
       const el = document.getElementById(containerId);
 
       const hasPlaying = section.playing && section.playing.item;
-      const hasLast = section.last_played && section.last_played.item;
-
-      if (!hasPlaying && !hasLast) {
-        el.innerHTML = \`
-          <div class="headerRow">
-            <p class="title">\${section.label}</p>
-            <div class="badges"><span class="pill">Nothing yet</span></div>
-          </div>
-          <p class="empty">Henry hasn’t played anything here yet.</p>
-        \`;
-        return;
-      }
-
-      const isPlaying = !!section.is_playing;
 
       el.innerHTML = \`
         <div class="headerRow">
           <p class="title">\${section.label}</p>
-          <div class="badges">\${badges(isPlaying)}</div>
+          <div class="badges">\${badges(!!section.is_playing)}</div>
         </div>
-        \${isPlaying && hasPlaying ? "<p class='special'><strong>You caught Henry live.</strong> He’s listening right now.</p>" : ""}
-        \${isPlaying && hasPlaying ? renderMini(section.playing, "Playing now") : ""}
-        \${hasLast ? renderMini(section.last_played, "Most recent") : ""}
+        \${section.is_playing && hasPlaying ? "<p class='special'><strong>You caught Henry live.</strong> He’s listening right now.</p>" : ""}
+        \${section.is_playing && hasPlaying ? renderMini(section.playing, "Playing now") : ""}
+        \${renderRecentList(section.recent || [])}
       \`;
     }
 
@@ -647,16 +605,6 @@ app.get("/", (req, res) => {
 </html>
 `);
 });
-
-// Simple HTML escaper for OG meta tags
-function escapeHtml(input) {
-  return String(input ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 // -------------------- START --------------------
 const PORT = process.env.PORT || 3000;
