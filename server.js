@@ -516,7 +516,7 @@ app.get("/", (req, res) => {
     <p class="hint">Auto-refreshes every 10 seconds.</p>
 
     <footer style="margin-top:24px;text-align:center;color:rgba(244,244,244,0.6);font-size:13px;">
-      Made with ♥ by Henry
+      Made with ♥ by Henry Franco
     </footer>
   </div>
 
