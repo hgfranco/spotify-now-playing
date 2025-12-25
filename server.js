@@ -5,6 +5,9 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
+// Serve static assets from the project directory (logo, favicons)
+app.use(express.static(__dirname));
+
 
 const {
   SPOTIFY_CLIENT_ID,
@@ -675,4 +678,10 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Running on http://127.0.0.1:${PORT}`);
   console.log("State file:", STATE_FILE);
+
+// Explicit fallbacks (useful if middleware order ever changes)
+app.get("/logo.png", (req, res) => res.sendFile(path.join(__dirname, "logo.png")));
+app.get("/favicon.png", (req, res) => res.sendFile(path.join(__dirname, "favicon.png")));
+app.get("/favicon-live.png", (req, res) => res.sendFile(path.join(__dirname, "favicon-live.png")));
+
 });
