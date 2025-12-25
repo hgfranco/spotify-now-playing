@@ -410,14 +410,14 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <style>
     :root {
-      --bg: #0b0b0b;
-      --fg: #f4f4f4;
-      --muted: rgba(244,244,244,0.72);
-      --card: rgba(255,255,255,0.07);
-      --border: rgba(255,255,255,0.13);
+      --bg: #F7F5F2;
+      --fg: #2B2B2B;
+      --muted: rgba(43,43,43,0.68);
+      --card: rgba(255,255,255,0.92);
+      --border: rgba(43,43,43,0.12);
       --accent: #1db954;
-      --danger: #ff3b30;
-      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+      --danger: #C64545;
+      --shadow: 0 10px 30px rgba(0,0,0,0.10);
     }
 
     * { box-sizing: border-box; }
@@ -427,14 +427,14 @@ app.get("/", (req, res) => {
       color: var(--fg);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       background:
-        radial-gradient(900px 600px at 20% 10%, rgba(29,185,84,0.10), transparent 60%),
-        radial-gradient(900px 600px at 90% 20%, rgba(255,59,48,0.10), transparent 55%),
+        radial-gradient(1200px 800px at 15% 10%, rgba(198,69,69,0.06), transparent 60%),
+        radial-gradient(1200px 800px at 85% 20%, rgba(29,185,84,0.06), transparent 55%),
         var(--bg);
     }
 
     .wrap {
       width: 100%;
-      max-width: 1040px;
+      max-width: 980px;
       margin: 0 auto;
       padding: 18px 14px 26px 14px;
       padding-bottom: calc(26px + env(safe-area-inset-bottom));
@@ -485,7 +485,7 @@ app.get("/", (req, res) => {
       align-items: center;
       gap: 8px;
       padding: 6px 10px;
-      border: 1px solid rgba(255,255,255,0.18);
+      border: 1px solid rgba(43,43,43,0.14);
       border-radius: 999px;
       font-size: 12px;
       opacity: 0.92;
@@ -519,7 +519,7 @@ app.get("/", (req, res) => {
     .eq span:nth-child(4) { height: 14px; animation-delay: 0.36s; }
     @keyframes bounce { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.15); } }
 
-    .special { margin: 6px 0 12px 0; color: rgba(244,244,244,0.90); font-size: 13px; line-height: 1.35; }
+    .special { margin: 6px 0 12px 0; color: rgba(43,43,43,0.90); font-size: 13px; line-height: 1.35; }
     .special strong { color: #fff; }
 
     .subhead { margin: 12px 0 6px 0; font-size: 12px; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted); }
@@ -529,13 +529,13 @@ app.get("/", (req, res) => {
 
     .art {
       width: 74px; height: 74px; border-radius: 14px; object-fit: cover;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.04);
+      border: 1px solid rgba(43,43,43,0.10);
     }
     @media (min-width: 900px) { .art { width: 88px; height: 88px; border-radius: 16px; } }
 
     .name { margin: 0 0 4px 0; font-size: 16px; font-weight: 850; line-height: 1.2; }
-    .who { margin: 0; color: rgba(244,244,244,0.78); font-size: 13px; line-height: 1.3; }
+    .who { margin: 0; color: rgba(43,43,43,0.72); font-size: 13px; line-height: 1.3; }
 
     a { color: var(--accent); text-decoration: none; font-weight: 800; display: inline-block; padding: 8px 0; }
 
@@ -558,7 +558,7 @@ app.get("/", (req, res) => {
 
     <p class="hint">Auto-refreshes every 10 seconds.</p>
 
-    <footer style="margin-top:24px;text-align:center;color:rgba(244,244,244,0.6);font-size:13px;">
+    <footer style="margin-top:24px;text-align:center;color:rgba(43,43,43,0.55);font-size:13px;">
       Made with ♥ by Henry Franco
     </footer>
   </div>
