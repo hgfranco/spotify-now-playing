@@ -575,6 +575,12 @@ app.get("/", (req, res) => {
   margin: 10px 0 6px 0;
 }
 
+
+.meta{
+  margin-top:6px;
+  font-size:13px;
+  color: rgba(43,43,43,0.58);
+}
 </style>
 </head>
 <body>
@@ -608,7 +614,23 @@ app.get("/", (req, res) => {
       return \`<span class="pill">Not playing</span>\`;
     }
 
-    function renderMini(block, label) {
+    
+    function timeAgo(iso) {
+      if (!iso) return "";
+      const t = new Date(iso).getTime();
+      if (!Number.isFinite(t)) return "";
+      const diff = Date.now() - t;
+      const sec = Math.max(0, Math.floor(diff / 1000));
+      if (sec < 10) return "just now";
+      if (sec < 60) return `${sec}s ago`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min}m ago`;
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return `${hr}h ago`;
+      const day = Math.floor(hr / 24);
+      return `${day}d ago`;
+    }
+function renderMini(block, label) {
       if (!block || !block.item) return "";
       const i = block.item;
       const art = i.image ? \`<img class="art" src="\${i.image}" alt="" />\` : \`<div class="art"></div>\`;
