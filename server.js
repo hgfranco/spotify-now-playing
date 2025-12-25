@@ -630,6 +630,7 @@ app.get("/", (req, res) => {
       const day = Math.floor(hr / 24);
       return String(day) + "d ago";
     }
+
 function renderMini(block, label) {
       if (!block || !block.item) return "";
       const i = block.item;
@@ -642,7 +643,7 @@ function renderMini(block, label) {
             <p class="name">\${i.title}</p>
             \${i.subtitle ? \`<p class="who">\${i.subtitle}</p>\` : ""}
             \${i.spotify_url ? \`<a href="\${i.spotify_url}" target="_blank" rel="noopener">Open in Spotify</a>\` : ""}
-            ${block.seen_at ? \`<p class="meta">\${label === "Playing now" ? "Updated " : "Played "}\${timeAgo(block.seen_at)}</p>\` : ""}
+            ${block.seen_at ? '<p class="meta">'+(label === "Playing now" ? "Updated " : "Played ")+timeAgo(block.seen_at)+'</p>' : ""}
           </div>
         </div>
       \`;
