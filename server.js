@@ -199,6 +199,44 @@ function updateCurrent(section, item, isPlaying, nowIso) {
   return { section, changed };
 }
 
+
+// -------------------- BACKFILL (music only) --------------------
+// Spotify provides a "Recently Played Tracks" endpoint, but there is no official
+// "recently played episodes" endpoint. So we can backfill MUSIC on cold start.
+// Podcasts/episodes will fill in as you listen going forward.
+async function backfillMusicHistoryIfNeeded() {
+  try {
+    const have = Array.isArray(music.history) ? music.history.length : 0;
+    if (have >= 2) return;
+
+    const accessToken = await getAccessToken();
+
+    // This returns tracks even if you only listened for a few seconds.
+    const res = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=50", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data.items)) return;
+
+    let anyChanged = false;
+
+    for (const row of data.items) {
+      const t = row && row.track;
+      if (!t || t.type !== "track") continue;
+
+      const seenAt = row.played_at || new Date().toISOString();
+      anyChanged = pushHistory(music, t, seenAt) || anyChanged;
+
+      if (music.history.length >= 10) break;
+    }
+
+    if (anyChanged) safeWriteState({ music, podcast });
+  } catch {
+    // ignore
+  }
+}
+
 // -------------------- POLLER --------------------
 async function pollAndRemember() {
   try {
@@ -256,6 +294,7 @@ async function pollAndRemember() {
 
 setInterval(pollAndRemember, 5000);
 pollAndRemember();
+backfillMusicHistoryIfNeeded();
 
 // -------------------- API --------------------
 function lastTwo(section) {
@@ -520,7 +559,7 @@ app.get("/", (req, res) => {
     <p class="hint">Auto-refreshes every 10 seconds.</p>
 
     <footer style="margin-top:24px;text-align:center;color:rgba(244,244,244,0.6);font-size:13px;">
-      Made with ♥ by Henry
+      Made with ♥ by Henry Franco
     </footer>
   </div>
 
