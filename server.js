@@ -542,12 +542,33 @@ app.get("/", (req, res) => {
     .empty { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
 
     .hint { margin: 14px 0 0 0; color: var(--muted); font-size: 13px; }
-  </style>
+  
+.site-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.logo {
+  max-width: 520px;
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 600px) {
+  .logo {
+    max-width: 92%;
+  }
+}
+
+</style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <h1>What is Henry listening to?</h1>
+    <header class="site-header">
+      <img src="/logo.png" alt="What is Henry listening to?" class="logo" />
       <p class="tagline" id="hero">Checking in on Henry’s current vibe…</p>
     </header>
 
