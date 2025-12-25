@@ -568,10 +568,11 @@ app.get("/", (req, res) => {
 
 
 .journal-rule {
-  width: 64px;
+  width: 100%;
+  max-width: 900px;
   height: 1px;
-  background: rgba(43, 43, 43, 0.18);
-  margin: 6px 0 4px 0;
+  background: linear-gradient(to right, transparent, rgba(43, 43, 43, 0.22), transparent);
+  margin: 10px 0 6px 0;
 }
 
 </style>
