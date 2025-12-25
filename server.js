@@ -6,9 +6,6 @@ const path = require("path");
 
 const app = express();
 
-// Serve static assets (favicon)
-app.use(express.static(__dirname));
-
 const {
   SPOTIFY_CLIENT_ID,
   SPOTIFY_CLIENT_SECRET,
@@ -16,8 +13,7 @@ const {
 } = process.env;
 
 // -------------------- PERSISTENCE --------------------
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "state.json");
+const STATE_FILE = path.join(__dirname, "state.json");
 
 /**
  * State shape (v2):
@@ -369,7 +365,6 @@ app.get("/", (req, res) => {
   <meta name="twitter:card" content="summary_large_image" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <link id="favicon" rel="icon" href="/favicon.png" />
   <style>
     :root {
       --bg: #0b0b0b;
@@ -521,17 +516,11 @@ app.get("/", (req, res) => {
     <p class="hint">Auto-refreshes every 10 seconds.</p>
 
     <footer style="margin-top:24px;text-align:center;color:rgba(244,244,244,0.6);font-size:13px;">
-      Made with ♥ by Henry
+      Made with ♥ by Henry Franco
     </footer>
   </div>
 
   <script>
-    function setFavicon(isLive) {
-      const link = document.getElementById("favicon");
-      if (!link) return;
-      link.href = isLive ? "/favicon-live.png" : "/favicon.png";
-    }
-
     function badges(isPlaying) {
       if (isPlaying) {
         return \`
@@ -606,9 +595,6 @@ app.get("/", (req, res) => {
       } else {
         hero.textContent = "Henry’s not listening at the moment. Here’s his most recent vibe.";
         document.title = "What is Henry listening to?";
-      }
-
-      setFavicon(isLive);
       }
     }
 
