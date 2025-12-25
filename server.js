@@ -642,6 +642,7 @@ function renderMini(block, label) {
             <p class="name">\${i.title}</p>
             \${i.subtitle ? \`<p class="who">\${i.subtitle}</p>\` : ""}
             \${i.spotify_url ? \`<a href="\${i.spotify_url}" target="_blank" rel="noopener">Open in Spotify</a>\` : ""}
+            ${block.seen_at ? \`<p class="meta">${label === "Playing now" ? "Updated " : "Played "}${timeAgo(block.seen_at)}</p>\` : ""}
           </div>
         </div>
       \`;
