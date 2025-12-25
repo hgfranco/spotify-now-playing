@@ -566,12 +566,21 @@ app.get("/", (req, res) => {
   }
 }
 
+
+.journal-rule {
+  width: 64px;
+  height: 1px;
+  background: rgba(43, 43, 43, 0.18);
+  margin: 6px 0 4px 0;
+}
+
 </style>
 </head>
 <body>
   <div class="wrap">
     <header class="site-header">
       <img src="/logo.png" alt="What is Henry listening to?" class="logo" />
+      <div class="journal-rule"></div>
       <p class="tagline" id="hero">Checking in on Henry’s current vibe…</p>
     </header>
 
