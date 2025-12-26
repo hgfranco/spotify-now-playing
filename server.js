@@ -632,21 +632,32 @@ app.get("/", (req, res) => {
     }
 
 function renderMini(block, label) {
-      if (!block || !block.item) return "";
-      const i = block.item;
-      const art = i.image ? \`<img class="art" src="\${i.image}" alt="" />\` : \`<div class="art"></div>\`;
-      return \`
-        <div class="subhead">\${label}</div>
-        <div class="mediaRow">
-          \${art}
-          <div>
-            <p class="name">\${i.title}</p>
-            \${i.subtitle ? \`<p class="who">\${i.subtitle}</p>\` : ""}
-            \${i.spotify_url ? \`<a href="\${i.spotify_url}" target="_blank" rel="noopener">Open in Spotify</a>\` : ""}
-            ${block.seen_at ? '<p class="meta">'+(label === "Playing now" ? "Updated " : "Played ")+timeAgo(block.seen_at)+'</p>' : ""}
-          </div>
-        </div>
-      \`;
+      const i = block && block.item ? block.item : null;
+      if (!i) {
+        return '<div class="empty">—</div>';
+      }
+
+      const link = i.spotify_url
+        ? '<a href="' + escapeHtml(i.spotify_url) + '" target="_blank" rel="noopener">Open in Spotify</a>'
+        : '';
+
+      const when = block && block.seen_at
+        ? '<p class="meta">' + (label === 'Playing now' ? 'Updated ' : 'Played ') + timeAgo(block.seen_at) + '</p>'
+        : '';
+
+      return (
+        '<div class="mini">' +
+          '<div class="art">' +
+            (i.image ? '<img src="' + escapeHtml(i.image) + '" alt="" />' : '') +
+          '</div>' +
+          '<div class="mini-body">' +
+            '<div class="mini-title">' + escapeHtml(i.name || '') + '</div>' +
+            '<div class="mini-sub">' + escapeHtml(i.artist || i.show || '') + '</div>' +
+            link +
+            when +
+          '</div>' +
+        '</div>'
+      );
     }
 
     function renderRecentList(recent) {
