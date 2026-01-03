@@ -703,11 +703,10 @@ app.get("/", (req, res) => {
         <p class="empty" id="visitorsStatus">Loading country map…</p>
         <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden; display:none;"></div>
         <p class="small" id="visitorsNote" style="display:none;">Shading is by country (not precise location) and may lag a bit.</p>
-      </div>
+</div>
     </div>
-        <p class="empty" id="visitorsStatus">Loading visitor locations…</p>
-        <ol class="countries" id="visitorsList" style="display:none;"></ol>
-        <p class="small" id="visitorsNote" style="display:none;">Data is approximate and may lag a bit.</p>
+        <p class="empty" >Loading country map…</p>
+<p class="small"  style="display:none;">Data is approximate and may lag a bit.</p>
       </div>
     </div>
 
