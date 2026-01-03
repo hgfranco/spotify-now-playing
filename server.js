@@ -391,12 +391,8 @@ app.get("/api/metrics/countries", async (req, res) => {
     const json = await resp.json();
 
     if (!resp.ok || json.errors) {
-      return res.status(502).json({
-        ok: false,
-        error: "Cloudflare GraphQL error",
-        status: resp.status,
-        details: json.errors || json,
-      });
+            console.error("Analytics upstream error", json.errors || json);
+      return res.status(502).json({ ok: false, error: "Analytics temporarily unavailable" });
     }
 
     const groups = json?.data?.viewer?.zones?.[0]?.httpRequestsAdaptiveGroups ?? [];
@@ -700,14 +696,12 @@ app.get("/", (req, res) => {
           <div class="badges"><span class="pill">Last 24h</span></div>
         </div>
 
-        <p class="empty" id="visitorsStatus">Loading country map…</p>
-        <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden; display:none;"></div>
+        <p class="empty" id="visitorsStatus">Loading map…</p>
+        <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden;"></div>
         <p class="small" id="visitorsNote" style="display:none;">Shading is by country (not precise location) and may lag a bit.</p>
 </div>
     </div>
-        <p class="empty" >Loading country map…</p>
-<p class="small"  style="display:none;">Data is approximate and may lag a bit.</p>
-      </div>
+</div>
     </div>
 
     <p class="hint">Auto-refreshes every 10 seconds.</p>
@@ -803,30 +797,42 @@ function renderMini(block, label) {
       const mapEl = document.getElementById("countryMap");
       const noteEl = document.getElementById("visitorsNote");
 
+      // Always show an empty map shell immediately
+      if (!window.__countryMap) {
+        const map = L.map("countryMap", { zoomControl: true, attributionControl: false })
+          .setView([20, 0], 2);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 5
+        }).addTo(map);
+
+        window.__countryMap = map;
+        window.__countryLayer = null;
+
+        // Leaflet sometimes needs this if container just appeared
+        setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 50);
+      }
+
+      // Default UI state: map visible, status message visible
+      mapEl.style.display = "block";
+      noteEl.style.display = "none";
+      statusEl.style.display = "block";
+      statusEl.textContent = "Map is live. Shading will appear once visit data is available.";
+
       try {
         const res = await fetch("/api/metrics/countries?hours=24");
         const json = await res.json();
 
-        if (!json || !json.ok) {
-          statusEl.textContent = "Visitor metrics unavailable right now.";
-          mapEl.style.display = "none";
-          noteEl.style.display = "none";
-          return;
-        }
-
-        const rows = (json.data || []);
-        if (rows.length === 0) {
-          statusEl.textContent = "No country data yet (Cloudflare is warming up).";
-          mapEl.style.display = "none";
-          noteEl.style.display = "none";
+        // If backend isn't ready or still empty, keep the empty map and message
+        if (!json || !json.ok || !json.data || json.data.length === 0) {
           return;
         }
 
         // Build lookup: country name -> requests
         const counts = {};
-        rows.forEach(r => { counts[r.country] = r.requests; });
+        json.data.forEach(r => { counts[r.country] = r.requests; });
 
-        // Some GeoJSON datasets use different country names than Cloudflare
+        // Some GeoJSON datasets use different country names than the data source
         const aliases = {
           "United States of America": "United States",
           "Russian Federation": "Russia",
@@ -849,7 +855,6 @@ function renderMini(block, label) {
         const values = Object.values(counts);
         const max = Math.max.apply(null, values);
 
-        // Simple 5-bucket scale
         function bucket(v) {
           if (v <= 0) return 0;
           if (v <= Math.max(1, Math.ceil(max * 0.02))) return 1;
@@ -858,7 +863,7 @@ function renderMini(block, label) {
           return 4;
         }
 
-        const colors = ["#2a2f3a", "#2d5aa6", "#2f7ed8", "#55b3ff", "#bfe9ff"]; // subtle in dark UI
+        const colors = ["#2a2f3a", "#2d5aa6", "#2f7ed8", "#55b3ff", "#bfe9ff"];
 
         function colorFor(name) {
           const key = aliases[name] || name;
@@ -866,36 +871,14 @@ function renderMini(block, label) {
           return colors[bucket(v)];
         }
 
-        // Initialize map once
-        if (!window.__countryMap) {
-          statusEl.style.display = "none";
-          mapEl.style.display = "block";
-          noteEl.style.display = "block";
-
-          const map = L.map("countryMap", { zoomControl: true, attributionControl: false })
-            .setView([20, 0], 2);
-
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 5
-          }).addTo(map);
-
-          window.__countryMap = map;
-          window.__countryLayer = null;
-        } else {
-          statusEl.style.display = "none";
-          mapEl.style.display = "block";
-          noteEl.style.display = "block";
-        }
-
         const map = window.__countryMap;
 
-        // Remove old layer before re-drawing
+        // Remove old shaded layer before re-drawing
         if (window.__countryLayer) {
           window.__countryLayer.remove();
           window.__countryLayer = null;
         }
 
-        // Fetch world GeoJSON and shade countries
         const geo = await fetch("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json").then(r => r.json());
 
         const layer = L.geoJSON(geo, {
@@ -909,21 +892,18 @@ function renderMini(block, label) {
             const geoName = feature.properties.name;
             const key = aliases[geoName] || geoName;
             const v = counts[key] || 0;
-            l.bindPopup(key + ": " + v + " visit" + (v === 1 ? "" : "s"));
+            l.bindPopup(`${key}: ${v} visit${v === 1 ? "" : "s"}`);
           }
         }).addTo(map);
 
         window.__countryLayer = layer;
 
-        // If the map was hidden at first render, Leaflet may need a size invalidation
-        setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 50);
-
+        // Now that shading exists, update messaging
+        statusEl.textContent = "Shading shows visits by country (last 24h).";
+        noteEl.style.display = "block";
       } catch (e) {
-        statusEl.textContent = "Error loading country map.";
-        const mapEl = document.getElementById("countryMap");
-        const noteEl = document.getElementById("visitorsNote");
-        if (mapEl) mapEl.style.display = "none";
-        if (noteEl) noteEl.style.display = "none";
+        // Keep map visible; just soften the status
+        statusEl.textContent = "Map is live. Shading will appear once data is available.";
       }
     }
 
