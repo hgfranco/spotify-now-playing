@@ -15,6 +15,8 @@ const {
   SPOTIFY_REFRESH_TOKEN,
 } = process.env;
 
+const { CF_API_TOKEN, CF_ZONE_TAG } = process.env;
+
 // -------------------- PERSISTENCE --------------------
 const PERSISTENT_DIR = "/var/data";
 const DATA_DIR = fs.existsSync(PERSISTENT_DIR) ? PERSISTENT_DIR : __dirname;
@@ -339,6 +341,85 @@ app.get("/api/status", (req, res) => {
     podcast: sectionPayload(podcast, "Henry’s podcasts"),
   });
 });
+
+// -------------------- CLOUDFLARE METRICS (Country map) --------------------
+// Returns request counts by country for the last N hours (1..24).
+// Requires env vars: CF_API_TOKEN (API Token) and CF_ZONE_TAG (Zone ID / zoneTag).
+app.get("/api/metrics/countries", async (req, res) => {
+  try {
+    if (!CF_API_TOKEN || !CF_ZONE_TAG) {
+      return res.status(500).json({ ok: false, error: "Missing CF_API_TOKEN or CF_ZONE_TAG" });
+    }
+
+    const hours = Math.max(1, Math.min(24, Number(req.query.hours || 24)));
+    const end = new Date();
+    const start = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const query = `
+      query($zoneTag: String!, $start: Time!, $end: Time!) {
+        viewer {
+          zones(filter: { zoneTag: $zoneTag }) {
+            httpRequestsAdaptiveGroups(
+              limit: 200,
+              orderBy: [count_DESC],
+              filter: { datetime_geq: $start, datetime_lt: $end }
+            ) {
+              count
+              dimensions { clientCountryName }
+            }
+          }
+        }
+      }
+    `;
+
+    const resp = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${CF_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        variables: {
+          zoneTag: CF_ZONE_TAG,
+          start: start.toISOString(),
+          end: end.toISOString(),
+        },
+      }),
+    });
+
+    const json = await resp.json();
+
+    if (!resp.ok || json.errors) {
+      return res.status(502).json({
+        ok: false,
+        error: "Cloudflare GraphQL error",
+        status: resp.status,
+        details: json.errors || json,
+      });
+    }
+
+    const groups = json?.data?.viewer?.zones?.[0]?.httpRequestsAdaptiveGroups ?? [];
+    const data = groups
+      .filter((g) => g?.dimensions?.clientCountryName)
+      .map((g) => ({
+        country: g.dimensions.clientCountryName,
+        requests: g.count,
+      }));
+
+    res.set("Cache-Control", "public, max-age=300"); // 5 min
+    return res.json({
+      ok: true,
+      hours,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      data,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "Server error", details: String(e) });
+  }
+});
+
 
 // -------------------- PAGE --------------------
 
@@ -711,15 +792,15 @@ function renderMini(block, label) {
 `);
 });
 
+// Explicit fallbacks (useful if middleware order ever changes)
+app.get("/logo.png", (req, res) => res.sendFile(path.join(__dirname, "logo.png")));
+app.get("/favicon.png", (req, res) => res.sendFile(path.join(__dirname, "favicon.png")));
+app.get("/favicon-live.png", (req, res) => res.sendFile(path.join(__dirname, "favicon-live.png")));
+
 // -------------------- START --------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Running on http://127.0.0.1:${PORT}`);
   console.log("State file:", STATE_FILE);
-
-// Explicit fallbacks (useful if middleware order ever changes)
-app.get("/logo.png", (req, res) => res.sendFile(path.join(__dirname, "logo.png")));
-app.get("/favicon.png", (req, res) => res.sendFile(path.join(__dirname, "favicon.png")));
-app.get("/favicon-live.png", (req, res) => res.sendFile(path.join(__dirname, "favicon-live.png")));
 
 });
