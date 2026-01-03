@@ -815,7 +815,7 @@ function renderMini(block, label) {
         noteEl.style.display = "block";
 
         listEl.innerHTML = rows
-          .map(r => `<li>${r.country}: <strong>${r.requests}</strong></li>`)
+          .map(r => '<li>' + r.country + ': <strong>' + r.requests + '</strong></li>')
           .join("");
       } catch (e) {
         const statusEl = document.getElementById("visitorsStatus");
