@@ -892,7 +892,7 @@ function renderMini(block, label) {
             const geoName = feature.properties.name;
             const key = aliases[geoName] || geoName;
             const v = counts[key] || 0;
-            l.bindPopup(`${key}: ${v} visit${v === 1 ? "" : "s"}`);
+            l.bindPopup(key + ": " + v + " visit" + (v === 1 ? "" : "s"));
           }
         }).addTo(map);
 
