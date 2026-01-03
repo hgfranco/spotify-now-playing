@@ -704,7 +704,7 @@ app.get("/", (req, res) => {
 </div>
     </div>
 
-    <p class="hint">Auto-refreshes every 10 seconds.</p>
+    <p class="hint" style="text-align:center;">Auto-refreshes every 10 seconds.</p>
 
     <footer style="margin-top:24px;text-align:center;color:rgba(43,43,43,0.55);font-size:13px;">
       Made with ♥ by Henry Franco
