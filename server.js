@@ -662,6 +662,13 @@ app.get("/", (req, res) => {
   font-size:13px;
   color: rgba(43,43,43,0.58);
 }
+
+    .visitorsGrid { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 900px) { .visitorsGrid { margin-top: 18px; } }
+    .small { font-size: 12px; color: var(--muted); }
+    .countries { margin: 10px 0 0 0; padding-left: 18px; }
+    .countries li { margin: 6px 0; }
+
 </style>
 </head>
 <body>
@@ -675,6 +682,19 @@ app.get("/", (req, res) => {
     <div class="grid">
       <div class="card" id="music">Loading…</div>
       <div class="card" id="podcast">Loading…</div>
+    </div>
+
+
+    <div class="visitorsGrid">
+      <div class="card" id="visitors">
+        <div class="headerRow">
+          <p class="title">Visitors</p>
+          <div class="badges"><span class="pill">Last 24h</span></div>
+        </div>
+        <p class="empty" id="visitorsStatus">Loading visitor locations…</p>
+        <ol class="countries" id="visitorsList" style="display:none;"></ol>
+        <p class="small" id="visitorsNote" style="display:none;">Data is approximate and may lag a bit.</p>
+      </div>
     </div>
 
     <p class="hint">Auto-refreshes every 10 seconds.</p>
@@ -764,6 +784,46 @@ function renderMini(block, label) {
       \`;
     }
 
+
+    async function loadVisitors() {
+      try {
+        const res = await fetch("/api/metrics/countries?hours=24");
+        const json = await res.json();
+
+        const statusEl = document.getElementById("visitorsStatus");
+        const listEl = document.getElementById("visitorsList");
+        const noteEl = document.getElementById("visitorsNote");
+
+        if (!json || !json.ok) {
+          statusEl.textContent = "Visitor metrics unavailable right now.";
+          listEl.style.display = "none";
+          noteEl.style.display = "none";
+          return;
+        }
+
+        const rows = (json.data || []).slice(0, 10);
+
+        if (rows.length === 0) {
+          statusEl.textContent = "No location data yet (Cloudflare is warming up).";
+          listEl.style.display = "none";
+          noteEl.style.display = "none";
+          return;
+        }
+
+        statusEl.style.display = "none";
+        listEl.style.display = "block";
+        noteEl.style.display = "block";
+
+        listEl.innerHTML = rows
+          .map(r => `<li>${r.country}: <strong>${r.requests}</strong></li>`)
+          .join("");
+      } catch (e) {
+        const statusEl = document.getElementById("visitorsStatus");
+        if (statusEl) statusEl.textContent = "Error loading visitor metrics.";
+      }
+    }
+
+
     async function load() {
       const res = await fetch("/api/status");
       const data = await res.json();
@@ -771,6 +831,8 @@ function renderMini(block, label) {
 
       renderSection("music", data.music);
       renderSection("podcast", data.podcast);
+
+      loadVisitors();
 
       const hero = document.getElementById("hero");
       const isLive = data.music.is_playing || data.podcast.is_playing;
