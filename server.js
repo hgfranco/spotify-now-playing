@@ -486,7 +486,7 @@ app.get("/", (req, res) => {
   <meta property="og:description" content="${escapeHtml(previewDesc)}" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://whatishenrylisteningto.com" />
-  ${previewImage ? `<meta property="og:image" content="${escapeHtml(previewImage)}" />` : ""}
+  ${previewImage ? "<meta property=\"og:image\" content=\"" + escapeHtml(previewImage) + "\" />" : ""}
 
   <!-- iMessage often prefers large preview images -->
   <meta name="twitter:card" content="summary_large_image" />
