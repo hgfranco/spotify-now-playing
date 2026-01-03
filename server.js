@@ -669,7 +669,13 @@ app.get("/", (req, res) => {
     .countries { margin: 10px 0 0 0; padding-left: 18px; }
     .countries li { margin: 6px 0; }
 
+
+    .mapLegend { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); }
+    .legendItem { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -691,6 +697,12 @@ app.get("/", (req, res) => {
           <p class="title">Visitors</p>
           <div class="badges"><span class="pill">Last 24h</span></div>
         </div>
+
+        <p class="empty" id="visitorsStatus">Loading country map…</p>
+        <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden; display:none;"></div>
+        <p class="small" id="visitorsNote" style="display:none;">Shading is by country (not precise location) and may lag a bit.</p>
+      </div>
+    </div>
         <p class="empty" id="visitorsStatus">Loading visitor locations…</p>
         <ol class="countries" id="visitorsList" style="display:none;"></ol>
         <p class="small" id="visitorsNote" style="display:none;">Data is approximate and may lag a bit.</p>
@@ -786,40 +798,131 @@ function renderMini(block, label) {
 
 
     async function loadVisitors() {
+      const statusEl = document.getElementById("visitorsStatus");
+      const mapEl = document.getElementById("countryMap");
+      const noteEl = document.getElementById("visitorsNote");
+
       try {
         const res = await fetch("/api/metrics/countries?hours=24");
         const json = await res.json();
 
-        const statusEl = document.getElementById("visitorsStatus");
-        const listEl = document.getElementById("visitorsList");
-        const noteEl = document.getElementById("visitorsNote");
-
         if (!json || !json.ok) {
           statusEl.textContent = "Visitor metrics unavailable right now.";
-          listEl.style.display = "none";
+          mapEl.style.display = "none";
           noteEl.style.display = "none";
           return;
         }
 
-        const rows = (json.data || []).slice(0, 10);
-
+        const rows = (json.data || []);
         if (rows.length === 0) {
-          statusEl.textContent = "No location data yet (Cloudflare is warming up).";
-          listEl.style.display = "none";
+          statusEl.textContent = "No country data yet (Cloudflare is warming up).";
+          mapEl.style.display = "none";
           noteEl.style.display = "none";
           return;
         }
 
-        statusEl.style.display = "none";
-        listEl.style.display = "block";
-        noteEl.style.display = "block";
+        // Build lookup: country name -> requests
+        const counts = {};
+        rows.forEach(r => { counts[r.country] = r.requests; });
 
-        listEl.innerHTML = rows
-          .map(r => '<li>' + r.country + ': <strong>' + r.requests + '</strong></li>')
-          .join("");
+        // Some GeoJSON datasets use different country names than Cloudflare
+        const aliases = {
+          "United States of America": "United States",
+          "Russian Federation": "Russia",
+          "Viet Nam": "Vietnam",
+          "Korea, Republic of": "South Korea",
+          "Korea, Democratic People's Republic of": "North Korea",
+          "Iran (Islamic Republic of)": "Iran",
+          "Bolivia (Plurinational State of)": "Bolivia",
+          "Tanzania, United Republic of": "Tanzania",
+          "Congo, Democratic Republic of the": "Democratic Republic of the Congo",
+          "Congo": "Republic of the Congo",
+          "Syrian Arab Republic": "Syria",
+          "Lao People's Democratic Republic": "Laos",
+          "Moldova, Republic of": "Moldova",
+          "Venezuela (Bolivarian Republic of)": "Venezuela",
+          "Türkiye": "Turkey",
+          "Czechia": "Czech Republic"
+        };
+
+        const values = Object.values(counts);
+        const max = Math.max.apply(null, values);
+
+        // Simple 5-bucket scale
+        function bucket(v) {
+          if (v <= 0) return 0;
+          if (v <= Math.max(1, Math.ceil(max * 0.02))) return 1;
+          if (v <= Math.ceil(max * 0.10)) return 2;
+          if (v <= Math.ceil(max * 0.30)) return 3;
+          return 4;
+        }
+
+        const colors = ["#2a2f3a", "#2d5aa6", "#2f7ed8", "#55b3ff", "#bfe9ff"]; // subtle in dark UI
+
+        function colorFor(name) {
+          const key = aliases[name] || name;
+          const v = counts[key] || 0;
+          return colors[bucket(v)];
+        }
+
+        // Initialize map once
+        if (!window.__countryMap) {
+          statusEl.style.display = "none";
+          mapEl.style.display = "block";
+          noteEl.style.display = "block";
+
+          const map = L.map("countryMap", { zoomControl: true, attributionControl: false })
+            .setView([20, 0], 2);
+
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 5
+          }).addTo(map);
+
+          window.__countryMap = map;
+          window.__countryLayer = null;
+        } else {
+          statusEl.style.display = "none";
+          mapEl.style.display = "block";
+          noteEl.style.display = "block";
+        }
+
+        const map = window.__countryMap;
+
+        // Remove old layer before re-drawing
+        if (window.__countryLayer) {
+          window.__countryLayer.remove();
+          window.__countryLayer = null;
+        }
+
+        // Fetch world GeoJSON and shade countries
+        const geo = await fetch("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json").then(r => r.json());
+
+        const layer = L.geoJSON(geo, {
+          style: (feature) => ({
+            fillColor: colorFor(feature.properties.name),
+            weight: 1,
+            color: "#6b7280",
+            fillOpacity: 0.75
+          }),
+          onEachFeature: (feature, l) => {
+            const geoName = feature.properties.name;
+            const key = aliases[geoName] || geoName;
+            const v = counts[key] || 0;
+            l.bindPopup(`${key}: ${v} visit${v === 1 ? "" : "s"}`);
+          }
+        }).addTo(map);
+
+        window.__countryLayer = layer;
+
+        // If the map was hidden at first render, Leaflet may need a size invalidation
+        setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 50);
+
       } catch (e) {
-        const statusEl = document.getElementById("visitorsStatus");
-        if (statusEl) statusEl.textContent = "Error loading visitor metrics.";
+        statusEl.textContent = "Error loading country map.";
+        const mapEl = document.getElementById("countryMap");
+        const noteEl = document.getElementById("visitorsNote");
+        if (mapEl) mapEl.style.display = "none";
+        if (noteEl) noteEl.style.display = "none";
       }
     }
 
