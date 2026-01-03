@@ -474,6 +474,8 @@ app.get("/", (req, res) => {
     previewImage = pickImage(lastKnown);
   }
 
+  const ogImageTag = previewImage ? '<meta property="og:image" content="' + escapeHtml(previewImage) + '" />' : "";
+
   res.send(`
 <!doctype html>
 <html>
@@ -486,7 +488,7 @@ app.get("/", (req, res) => {
   <meta property="og:description" content="${escapeHtml(previewDesc)}" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://whatishenrylisteningto.com" />
-  ${previewImage ? "<meta property=\"og:image\" content=\"" + escapeHtml(previewImage) + "\" />" : ""}
+  ${ogImageTag}
 
   <!-- iMessage often prefers large preview images -->
   <meta name="twitter:card" content="summary_large_image" />
@@ -908,7 +910,7 @@ function renderMini(block, label) {
             const geoName = feature.properties.name;
             const key = aliases[geoName] || geoName;
             const v = counts[key] || 0;
-            l.bindPopup(`${key}: ${v} visit${v === 1 ? "" : "s"}`);
+            l.bindPopup(key + ": " + v + " visit" + (v === 1 ? "" : "s"));
           }
         }).addTo(map);
 
