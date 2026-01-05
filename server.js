@@ -396,14 +396,25 @@ app.get("/api/metrics/countries", async (req, res) => {
     }
 
     const groups = json?.data?.viewer?.zones?.[0]?.httpRequestsAdaptiveGroups ?? [];
-    const data = groups
-      .filter((g) => g?.dimensions?.clientCountryName)
-      .map((g) => ({
-        country: g.dimensions.clientCountryName,
-        requests: g.count,
-      }));
+    
+// Normalize country into both code + display name where possible.
+// Some data sources return ISO-3166-1 alpha-2 codes (e.g., "US", "CN").
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
 
-    res.set("Cache-Control", "public, max-age=300"); // 5 min
+const data = groups
+  .filter((g) => g?.dimensions?.clientCountryName)
+  .map((g) => {
+    const raw = String(g.dimensions.clientCountryName).trim().toUpperCase();
+    const isCode = /^[A-Z]{2}$/.test(raw);
+    const name = isCode ? (regionNames.of(raw) || raw) : raw;
+    return {
+      countryCode: isCode ? raw : null,
+      country: name,
+      requests: g.count,
+    };
+  });
+
+res.set("Cache-Control", "public, max-age=300"); // 5 min
     return res.json({
       ok: true,
       hours,
@@ -830,7 +841,10 @@ function renderMini(block, label) {
 
         // Build lookup: country name -> requests
         const counts = {};
-        json.data.forEach(r => { counts[r.country] = r.requests; });
+        json.data.forEach(r => {
+          const name = r.country;
+          counts[name] = (counts[name] || 0) + r.requests;
+        });
 
         // Some GeoJSON datasets use different country names than the data source
         const aliases = {
