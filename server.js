@@ -866,7 +866,7 @@ app.get("/", (req, res) => {
 
         <p class="empty" id="visitorsStatus">Loading map…</p>
         <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden;"></div>
-        <p class="small" id="visitorsNote" style="display:none;">Highlight is based on artist origin by country and may lag a bit.</p>
+        <p class="small" id="visitorsNote" style="display:none;">Shading is based on artist origin by country and may lag a bit.</p>
 </div>
     </div>
 </div>
@@ -1051,8 +1051,7 @@ function renderMini(block, label) {
         }
 
         
-
-// Fetch world GeoJSON and draw a country "halo" that scales with value
+// Fetch world GeoJSON to compute centroids
 const geo = await fetch("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json")
   .then(r => r.json());
 
@@ -1062,51 +1061,56 @@ if (window.__countryLayer) {
   window.__countryLayer = null;
 }
 
-function strokeFor(v) {
-  // Outline thickness scales with value (sqrt keeps it sane)
-  return Math.max(1, Math.sqrt(v) * 1.6);
+const circles = [];
+
+function radiusFor(v) {
+  // sqrt scale so growth feels natural
+  return Math.max(4, Math.sqrt(v) * 6);
 }
 
-function fillFor(v) {
-  // Subtle fill so it feels like the whole country is highlighted
-  return Math.min(0.55, 0.10 + Math.sqrt(v) * 0.08);
-}
+geo.features.forEach(feature => {
+  const name = feature.properties.name;
+  const key = aliases[name] || name;
+  const v = counts[key] || 0;
+  if (v <= 0) return;
 
-const layer = L.geoJSON(geo, {
-  style: (feature) => {
-    const name = feature.properties.name;
-    const key = aliases[name] || name;
-    const v = counts[key] || 0;
+  
+// Pick a sensible single point for the country.
+// Prefer a fixed override for tricky shapes (e.g., USA), otherwise use bounds center.
+const overrides = {
+  "United States": [39.8283, -98.5795] // geographic center-ish of contiguous US
+};
 
-    if (v <= 0) {
-      return {
-        weight: 1,
-        color: "#9ca3af",
-        fillOpacity: 0,
-        opacity: 0.35
-      };
-    }
-
-    return {
-      weight: strokeFor(v),
-      color: "#60a5fa",
-      opacity: 0.9,
-      fillColor: "#60a5fa",
-      fillOpacity: fillFor(v)
-    };
-  },
-  onEachFeature: (feature, l) => {
-    const name = feature.properties.name;
-    const key = aliases[name] || name;
-    const v = counts[key] || 0;
-    l.bindPopup(key + ": " + v + " artist" + (v === 1 ? "" : "s"));
+let lat, lng;
+if (overrides[key]) {
+  lat = overrides[key][0];
+  lng = overrides[key][1];
+} else {
+  try {
+    const center = L.geoJSON(feature).getBounds().getCenter();
+    lat = center.lat;
+    lng = center.lng;
+  } catch (e) {
+    return;
   }
-}).addTo(map);
+}
 
-window.__countryLayer = layer;
+const circle = L.circleMarker([lat, lng], {
+    radius: radiusFor(v),
+    color: "#60a5fa",
+    fillColor: "#60a5fa",
+    fillOpacity: 0.6,
+    weight: 1,
+  }).bindPopup(key + ": " + v + " artist" + (v === 1 ? "" : "s"));
+
+  circle.addTo(map);
+  circles.push(circle);
+});
+
+window.__countryLayer = L.layerGroup(circles).addTo(map);
 
         // Now that shading exists, update messaging
-        statusEl.textContent = "Highlight shows unique artists by country (last 30d).";
+        statusEl.textContent = "Shading shows visits by country (last 24h).";
         noteEl.style.display = "block";
       } catch (e) {
         // Keep map visible; just soften the status
