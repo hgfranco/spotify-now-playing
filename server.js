@@ -1108,25 +1108,33 @@ async function loadOriginTable() {
     // Show top 8 countries, top 8 artists each (keeps UI tidy; easy to raise later)
     const countries = j.data.slice(0, 8);
 
-    const html = `
-      <div class="originGrid">
-        ${countries.map(c => `
-          <div class="originCountry">
-            <h3>${c.country} <span class="originMeta">(${c.uniqueArtists} artists)</span></h3>
-            <ol>
-              ${c.artists.slice(0, 8).map(a => `
-                <li>
-                  ${a.url ? `<a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.name}</a>` : a.name}
-                  <span class="originMeta"> — ${a.count}</span>
-                </li>
-              `).join("")}
-            </ol>
-          </div>
-        `).join("")}
-      </div>
-    `;
+    
+const parts = [];
+parts.push('<div class="originGrid">');
 
-    el.innerHTML = html;
+countries.forEach(function(c) {
+  parts.push('<div class="originCountry">');
+  parts.push('<h3>' + c.country + ' <span class="originMeta">(' + c.uniqueArtists + ' artists)</span></h3>');
+  parts.push('<ol>');
+
+  c.artists.slice(0, 8).forEach(function(a) {
+    parts.push('<li>');
+    if (a.url) {
+      parts.push('<a href="' + a.url + '" target="_blank" rel="noopener noreferrer">' + a.name + '</a>');
+    } else {
+      parts.push(a.name);
+    }
+    parts.push('<span class="originMeta"> — ' + a.count + '</span>');
+    parts.push('</li>');
+  });
+
+  parts.push('</ol>');
+  parts.push('</div>');
+});
+
+parts.push('</div>');
+
+el.innerHTML = parts.join("");
   } catch (e) {
     el.innerHTML = "";
   }
