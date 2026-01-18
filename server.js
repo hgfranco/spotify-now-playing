@@ -1050,24 +1050,62 @@ function renderMini(block, label) {
           window.__countryLayer = null;
         }
 
-        const geo = await fetch("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json").then(r => r.json());
+        
+// Fetch world GeoJSON to compute centroids
+const geo = await fetch("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json")
+  .then(r => r.json());
 
-        const layer = L.geoJSON(geo, {
-          style: (feature) => ({
-            fillColor: colorFor(feature.properties.name),
-            weight: 1,
-            color: "#6b7280",
-            fillOpacity: 0.75
-          }),
-          onEachFeature: (feature, l) => {
-            const geoName = feature.properties.name;
-            const key = aliases[geoName] || geoName;
-            const v = counts[key] || 0;
-            l.bindPopup(key + ": " + v + " artist" + (v === 1 ? "" : "s"));
-          }
-        }).addTo(map);
+// Remove old layer before re-drawing
+if (window.__countryLayer) {
+  window.__countryLayer.remove();
+  window.__countryLayer = null;
+}
 
-        window.__countryLayer = layer;
+const circles = [];
+
+function radiusFor(v) {
+  // sqrt scale so growth feels natural
+  return Math.max(4, Math.sqrt(v) * 6);
+}
+
+geo.features.forEach(feature => {
+  const name = feature.properties.name;
+  const key = aliases[name] || name;
+  const v = counts[key] || 0;
+  if (v <= 0) return;
+
+  // Compute centroid (rough but fine for visualization)
+  const coords = feature.geometry.coordinates;
+  let lat = 0, lng = 0, n = 0;
+
+  function walk(c) {
+    if (typeof c[0] === "number") {
+      lng += c[0];
+      lat += c[1];
+      n++;
+    } else {
+      c.forEach(walk);
+    }
+  }
+  walk(coords);
+
+  if (n === 0) return;
+  lat /= n;
+  lng /= n;
+
+  const circle = L.circleMarker([lat, lng], {
+    radius: radiusFor(v),
+    color: "#60a5fa",
+    fillColor: "#60a5fa",
+    fillOpacity: 0.6,
+    weight: 1,
+  }).bindPopup(key + ": " + v + " artist" + (v === 1 ? "" : "s"));
+
+  circle.addTo(map);
+  circles.push(circle);
+});
+
+window.__countryLayer = L.layerGroup(circles).addTo(map);
 
         // Now that shading exists, update messaging
         statusEl.textContent = "Shading shows visits by country (last 24h).";
