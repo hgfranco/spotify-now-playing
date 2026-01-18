@@ -582,6 +582,125 @@ app.get("/api/metrics/artist-origins", async (req, res) => {
   }
 });
 
+// -------------------- MUSIC METRICS: Artist origins detail (per-country artists + counts) --------------------
+// Returns artist play counts grouped by inferred artist origin country over the last N days (default 30).
+// Provides Spotify artist links from Spotify API data.
+app.get("/api/metrics/artist-origins-detail", async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(30, Number(req.query.days || 30)));
+    const cacheKey = `artist-origins-detail:${days}`;
+
+    const cached = aggregateCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < (30 * 60 * 1000)) {
+      res.set("Cache-Control", "public, max-age=300");
+      return res.json(cached.payload);
+    }
+
+    if (typeof getAccessToken !== "function") {
+      return res.status(500).json({ ok: false, error: "Spotify authentication not available" });
+    }
+
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      return res.status(502).json({ ok: false, error: "Could not get Spotify access token" });
+    }
+
+    const afterMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    const MAX_ITEMS = 500;
+
+    let items = [];
+    let before = Date.now();
+
+    while (items.length < MAX_ITEMS) {
+      const url = `https://api.spotify.com/v1/me/player/recently-played?limit=50&before=${before}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+
+      if (!r.ok) {
+        const t = await r.text();
+        return res.status(502).json({ ok: false, error: "Spotify recently-played failed", status: r.status, details: t });
+      }
+
+      const j = await r.json();
+      const batch = Array.isArray(j.items) ? j.items : [];
+      if (batch.length === 0) break;
+
+      for (const it of batch) {
+        const playedAt = new Date(it.played_at).getTime();
+        if (!Number.isFinite(playedAt) || playedAt < afterMs) continue;
+        items.push(it);
+        if (items.length >= MAX_ITEMS) break;
+      }
+
+      const last = batch[batch.length - 1];
+      const lastPlayedAt = last && last.played_at ? new Date(last.played_at).getTime() : null;
+      if (!lastPlayedAt || lastPlayedAt <= afterMs) break;
+      before = lastPlayedAt - 1;
+    }
+
+    // Count plays per artist (note: a track can have multiple artists; each gets a count)
+    const artistCounts = new Map(); // name -> { count, url }
+    for (const it of items) {
+      const track = it.track;
+      const artists = track && Array.isArray(track.artists) ? track.artists : [];
+      for (const a of artists) {
+        if (!a || !a.name) continue;
+        const name = a.name;
+        const url = a.external_urls && a.external_urls.spotify ? a.external_urls.spotify : null;
+        const cur = artistCounts.get(name) || { count: 0, url };
+        cur.count += 1;
+        if (!cur.url && url) cur.url = url;
+        artistCounts.set(name, cur);
+      }
+    }
+
+    const uniqueArtists = Array.from(artistCounts.keys());
+
+    // Resolve artist -> country (rate-limited; cached)
+    const countryToArtists = new Map(); // countryName -> [{name,url,count}]
+    let i = 0;
+    for (const name of uniqueArtists) {
+      if (i > 0) await sleep(1000);
+      i++;
+
+      const country = await lookupArtistCountryMusicBrainz(name);
+      const countryName = country || "Unknown";
+      if (!countryToArtists.has(countryName)) countryToArtists.set(countryName, []);
+      const meta = artistCounts.get(name) || { count: 0, url: null };
+      countryToArtists.get(countryName).push({ name, url: meta.url, count: meta.count });
+    }
+
+    // Sort artists within each country by play count desc
+    const data = Array.from(countryToArtists.entries())
+      .map(([country, artists]) => {
+        artists.sort((a, b) => b.count - a.count);
+        return {
+          country,
+          uniqueArtists: artists.length,
+          plays: artists.reduce((sum, a) => sum + a.count, 0),
+          artists
+        };
+      })
+      .sort((a, b) => b.uniqueArtists - a.uniqueArtists);
+
+    const payload = {
+      ok: true,
+      days,
+      uniqueArtistsTotal: uniqueArtists.length,
+      playsScanned: items.length,
+      data
+    };
+
+    aggregateCache.set(cacheKey, { payload, ts: Date.now() });
+
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json(payload);
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "Server error", details: String(e) });
+  }
+});
+
+
+
 
 
 
@@ -839,7 +958,18 @@ app.get("/", (req, res) => {
     .mapLegend { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); }
     .legendItem { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+
+
+    .originGrid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 900px) { .originGrid { grid-template-columns: 1fr 1fr; } }
+    .originCountry { border: 1px solid rgba(0,0,0,0.06); border-radius: 14px; padding: 12px; background: rgba(255,255,255,0.55); }
+    .originCountry h3 { margin: 0 0 8px 0; font-size: 14px; }
+    .originCountry ol { margin: 0; padding-left: 18px; }
+    .originCountry li { margin: 6px 0; }
+    .originCountry a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+    .originMeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
 </style>
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
@@ -866,6 +996,7 @@ app.get("/", (req, res) => {
 
         <p class="empty" id="visitorsStatus">Loading map…</p>
         <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden;"></div>
+        <div id="originTable" style="margin-top: 14px;"></div>
         <p class="small" id="visitorsNote" style="display:none;">Shading is based on artist origin by country and may lag a bit.</p>
 </div>
     </div>
@@ -959,6 +1090,47 @@ function renderMini(block, label) {
       \`;
     }
 
+
+
+async function loadOriginTable() {
+  const el = document.getElementById("originTable");
+  if (!el) return;
+
+  try {
+    const r = await fetch("/api/metrics/artist-origins-detail?days=30");
+    const j = await r.json();
+
+    if (!j || !j.ok || !Array.isArray(j.data) || j.data.length === 0) {
+      el.innerHTML = "";
+      return;
+    }
+
+    // Show top 8 countries, top 8 artists each (keeps UI tidy; easy to raise later)
+    const countries = j.data.slice(0, 8);
+
+    const html = `
+      <div class="originGrid">
+        ${countries.map(c => `
+          <div class="originCountry">
+            <h3>${c.country} <span class="originMeta">(${c.uniqueArtists} artists)</span></h3>
+            <ol>
+              ${c.artists.slice(0, 8).map(a => `
+                <li>
+                  ${a.url ? `<a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.name}</a>` : a.name}
+                  <span class="originMeta"> — ${a.count}</span>
+                </li>
+              `).join("")}
+            </ol>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = "";
+  }
+}
 
     async function loadVisitors() {
       const statusEl = document.getElementById("visitorsStatus");
