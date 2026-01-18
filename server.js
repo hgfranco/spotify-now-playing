@@ -5,6 +5,71 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
+
+
+// -------------------- MUSIC ORIGIN METRICS (MusicBrainz) --------------------
+// In-memory cache to avoid repeated lookups and to be kind to MusicBrainz.
+const artistOriginCache = new Map(); // key: normalized artist name -> { countryName, ts }
+const aggregateCache = new Map(); // key: cacheKey -> { payload, ts }
+
+function normalizeArtistName(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchJson(url, headers = {}) {
+  const resp = await fetch(url, { headers });
+  const txt = await resp.text();
+  try {
+    return { ok: resp.ok, status: resp.status, json: JSON.parse(txt) };
+  } catch {
+    return { ok: resp.ok, status: resp.status, json: null };
+  }
+}
+
+async function lookupArtistCountryMusicBrainz(artistName) {
+  const key = normalizeArtistName(artistName);
+  if (!key) return null;
+
+  const cached = artistOriginCache.get(key);
+  // Cache for 30 days
+  const TTL = 30 * 24 * 60 * 60 * 1000;
+  if (cached && (Date.now() - cached.ts) < TTL) return cached.countryName;
+
+  const q = encodeURIComponent(`artist:"${artistName}"`);
+  const url = `https://musicbrainz.org/ws/2/artist?query=${q}&fmt=json&limit=1`;
+
+  const { ok, json } = await fetchJson(url, {
+    "User-Agent": "whatishenrylisteningto/1.0 (contact: none)",
+    "Accept": "application/json",
+  });
+
+  if (!ok || !json || !Array.isArray(json.artists) || json.artists.length === 0) {
+    artistOriginCache.set(key, { countryName: null, ts: Date.now() });
+    return null;
+  }
+
+  const a = json.artists[0];
+  let countryName = null;
+
+  if (a.country && /^[A-Z]{2}$/.test(a.country)) {
+    try {
+      const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+      countryName = regionNames.of(a.country) || a.country;
+    } catch {
+      countryName = a.country;
+    }
+  } else if (a.area && a.area.name) {
+    countryName = a.area.name;
+  }
+
+  artistOriginCache.set(key, { countryName, ts: Date.now() });
+  return countryName;
+}
+
 // Serve static assets from the project directory (logo, favicons)
 app.use(express.static(__dirname));
 
@@ -427,6 +492,98 @@ res.set("Cache-Control", "public, max-age=300"); // 5 min
   }
 });
 
+// -------------------- MUSIC METRICS: Unique artists by origin (last N days) --------------------
+// Returns unique artist count per country over the last N days (default 30).
+// Uses Spotify "Recently Played" (capped) + MusicBrainz origin lookup (best-effort).
+app.get("/api/metrics/artist-origins", async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(30, Number(req.query.days || 30)));
+    const cacheKey = `artist-origins:${days}`;
+
+    const cached = aggregateCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < (30 * 60 * 1000)) {
+      res.set("Cache-Control", "public, max-age=300");
+      return res.json(cached.payload);
+    }
+
+    if (typeof getSpotifyAccessToken !== "function") {
+      return res.status(500).json({ ok: false, error: "Spotify token helper not available" });
+    }
+
+    const accessToken = await getSpotifyAccessToken();
+    if (!accessToken) {
+      return res.status(502).json({ ok: false, error: "Could not get Spotify access token" });
+    }
+
+    const afterMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    const MAX_ITEMS = 500;
+
+    let items = [];
+    let before = Date.now();
+
+    while (items.length < MAX_ITEMS) {
+      const url = `https://api.spotify.com/v1/me/player/recently-played?limit=50&before=${before}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+
+      if (!r.ok) {
+        const t = await r.text();
+        return res.status(502).json({ ok: false, error: "Spotify recently-played failed", status: r.status, details: t });
+      }
+
+      const j = await r.json();
+      const batch = Array.isArray(j.items) ? j.items : [];
+      if (batch.length === 0) break;
+
+      for (const it of batch) {
+        const playedAt = new Date(it.played_at).getTime();
+        if (!Number.isFinite(playedAt) || playedAt < afterMs) continue;
+        items.push(it);
+        if (items.length >= MAX_ITEMS) break;
+      }
+
+      const last = batch[batch.length - 1];
+      const lastPlayedAt = last && last.played_at ? new Date(last.played_at).getTime() : null;
+      if (!lastPlayedAt || lastPlayedAt <= afterMs) break;
+      before = lastPlayedAt - 1;
+    }
+
+    const uniqueArtists = new Set();
+    for (const it of items) {
+      const track = it.track;
+      const artists = track && Array.isArray(track.artists) ? track.artists : [];
+      for (const a of artists) {
+        if (a && a.name) uniqueArtists.add(a.name);
+      }
+    }
+
+    const countryToArtists = new Map();
+    let i = 0;
+    for (const name of uniqueArtists) {
+      if (i > 0) await sleep(1000);
+      i++;
+
+      const country = await lookupArtistCountryMusicBrainz(name);
+      const countryName = country || "Unknown";
+      if (!countryToArtists.has(countryName)) countryToArtists.set(countryName, new Set());
+      countryToArtists.get(countryName).add(name);
+    }
+
+    const data = Array.from(countryToArtists.entries())
+      .map(([country, set]) => ({ country, uniqueArtists: set.size }))
+      .sort((a, b) => b.uniqueArtists - a.uniqueArtists);
+
+    const payload = { ok: true, days, uniqueArtistsTotal: uniqueArtists.size, playsScanned: items.length, data };
+    aggregateCache.set(cacheKey, { payload, ts: Date.now() });
+
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json(payload);
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "Server error", details: String(e) });
+  }
+});
+
+
+
 
 // -------------------- PAGE --------------------
 
@@ -703,13 +860,13 @@ app.get("/", (req, res) => {
     <div class="visitorsGrid">
       <div class="card" id="visitors">
         <div class="headerRow">
-          <p class="title">Visitors</p>
-          <div class="badges"><span class="pill">Last 24h</span></div>
+          <p class="title">Artist Origins</p>
+          <div class="badges"><span class="pill">Last 30d</span></div>
         </div>
 
         <p class="empty" id="visitorsStatus">Loading map…</p>
         <div id="countryMap" style="height: 420px; border-radius: 14px; overflow: hidden;"></div>
-        <p class="small" id="visitorsNote" style="display:none;">Shading is by country (not precise location) and may lag a bit.</p>
+        <p class="small" id="visitorsNote" style="display:none;">Shading is based on artist origin by country and may lag a bit.</p>
 </div>
     </div>
 </div>
@@ -831,7 +988,7 @@ function renderMini(block, label) {
       statusEl.textContent = "Map is live. Shading will appear once visit data is available.";
 
       try {
-        const res = await fetch("/api/metrics/countries?hours=24");
+        const res = await fetch("/api/metrics/artist-origins?days=30");
         const json = await res.json();
 
         // If backend isn't ready or still empty, keep the empty map and message
@@ -843,7 +1000,7 @@ function renderMini(block, label) {
         const counts = {};
         json.data.forEach(r => {
           const name = r.country;
-          counts[name] = (counts[name] || 0) + r.requests;
+          counts[name] = (counts[name] || 0) + (r.uniqueArtists || 0);
         });
 
         // Some GeoJSON datasets use different country names than the data source
@@ -906,7 +1063,7 @@ function renderMini(block, label) {
             const geoName = feature.properties.name;
             const key = aliases[geoName] || geoName;
             const v = counts[key] || 0;
-            l.bindPopup(key + ": " + v + " visit" + (v === 1 ? "" : "s"));
+            l.bindPopup(key + ": " + v + " artist" + (v === 1 ? "" : "s"));
           }
         }).addTo(map);
 
