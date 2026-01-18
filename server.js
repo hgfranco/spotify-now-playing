@@ -506,11 +506,11 @@ app.get("/api/metrics/artist-origins", async (req, res) => {
       return res.json(cached.payload);
     }
 
-    if (typeof getSpotifyAccessToken !== "function") {
-      return res.status(500).json({ ok: false, error: "Spotify token helper not available" });
+    if (typeof getAccessToken !== "function") {
+      return res.status(500).json({ ok: false, error: "Spotify authentication not available" });
     }
 
-    const accessToken = await getSpotifyAccessToken();
+    const accessToken = await getAccessToken();
     if (!accessToken) {
       return res.status(502).json({ ok: false, error: "Could not get Spotify access token" });
     }
