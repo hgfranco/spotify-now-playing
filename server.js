@@ -15,6 +15,12 @@ function normalizeArtistName(name) {
   return String(name || "").trim().toLowerCase();
 }
 
+// Manual overrides for artists whose MusicBrainz country does not match
+// the musical/cultural origin Henry wants displayed on the site.
+const ARTIST_COUNTRY_OVERRIDES = new Map([
+  ["romeo santos", "Dominican Republic"],
+]);
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -32,6 +38,9 @@ async function fetchJson(url, headers = {}) {
 async function lookupArtistCountryMusicBrainz(artistName) {
   const key = normalizeArtistName(artistName);
   if (!key) return null;
+
+  const overrideCountry = ARTIST_COUNTRY_OVERRIDES.get(key);
+  if (overrideCountry) return overrideCountry;
 
   const cached = artistOriginCache.get(key);
   const TTL = 30 * 24 * 60 * 60 * 1000;
