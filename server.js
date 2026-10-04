@@ -970,7 +970,6 @@ app.get("/", (req, res) => {
         const r = await fetch("/api/metrics/artist-origins-detail?days=30");
         const j = await r.json();
         if (!j || !j.ok || !Array.isArray(j.data) || j.data.length === 0) {
-          el.innerHTML = "";
           return;
         }
         const countries = j.data.slice(0, 8);
@@ -989,7 +988,7 @@ app.get("/", (req, res) => {
         parts.push('</div>');
         el.innerHTML = parts.join("");
       } catch {
-        el.innerHTML = "";
+        // Keep the last successfully rendered artist-origin data on screen.
       }
     }
 
@@ -1092,7 +1091,6 @@ app.get("/", (req, res) => {
       if (!data.ok) return;
       renderSection("music", data.music);
       renderSection("podcast", data.podcast);
-      loadVisitors();
 
       const hero = document.getElementById("hero");
       const isLive = data.music.is_playing || data.podcast.is_playing;
@@ -1106,7 +1104,9 @@ app.get("/", (req, res) => {
     }
 
     load();
+    loadVisitors();
     setInterval(load, 10000);
+    setInterval(loadVisitors, 30 * 60 * 1000);
   </script>
 </body>
 </html>
