@@ -75,8 +75,7 @@ async function lookupArtistCountryMusicBrainz(artistName) {
   return countryName;
 }
 
-// Serve static assets from the project directory (logo, favicons)
-app.use(express.static(__dirname));
+// Public assets are served only through the explicit routes below.
 
 const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env;
 const ENV_SPOTIFY_REFRESH_TOKEN = process.env.SPOTIFY_REFRESH_TOKEN || "";
