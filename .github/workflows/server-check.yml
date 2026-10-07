@@ -9,7 +9,7 @@ on:
       - ".github/workflows/server-check.yml"
   push:
     branches:
-      - what-is-henry-listening-to
+      - main
     paths:
       - "server.js"
       - "package.json"
