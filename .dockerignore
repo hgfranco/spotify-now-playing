@@ -1,0 +1,10 @@
+node_modules/
+.git/
+.github/
+.env
+.env.*
+*.pem
+*.key
+state.json
+spotify-refresh-token.txt
+k8s-setup/
