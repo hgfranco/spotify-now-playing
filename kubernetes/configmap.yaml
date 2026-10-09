@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spotify-now-playing
+  namespace: spotify-now-playing
+data:
+  DATA_DIR: "/var/data"

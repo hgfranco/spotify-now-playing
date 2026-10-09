@@ -43,7 +43,10 @@ spec:
             failureThreshold: 3
           env:
             - name: DATA_DIR
-              value: /var/data
+              valueFrom:
+                configMapKeyRef:
+                  name: spotify-now-playing
+                  key: DATA_DIR
           volumeMounts:
             - name: data
               mountPath: /var/data
