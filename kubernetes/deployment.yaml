@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spotify-now-playing
+  namespace: spotify-now-playing
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: spotify-now-playing
+  template:
+    metadata:
+      labels:
+        app: spotify-now-playing
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: spotify-now-playing
+          image: 643593783040.dkr.ecr.us-east-1.amazonaws.com/spotify-now-playing:0.1.0
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DATA_DIR
+              value: /var/data
+          volumeMounts:
+            - name: data
+              mountPath: /var/data
+      volumes:
+        - name: data
+          emptyDir: {}
