@@ -63,4 +63,5 @@ spec:
               mountPath: /var/data
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: spotify-data
