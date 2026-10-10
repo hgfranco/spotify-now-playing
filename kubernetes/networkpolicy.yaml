@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: spotify-ingress
+  namespace: spotify-now-playing
+spec:
+  podSelector:
+    matchLabels:
+      app: spotify-now-playing
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              access: spotify
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 3000
