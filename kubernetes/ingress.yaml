@@ -7,11 +7,15 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: instance
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:643593783040:certificate/4b17dd12-5d84-4a56-9c65-8f6a550c0249
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/healthcheck-path: /api/status
 spec:
   ingressClassName: alb
+  tls:
+    - hosts:
+        - k8s.whatishenrylisteningto.com
+        - whatishenrylisteningto.com
+        - henryfranco.dev
   rules:
     - host: k8s.whatishenrylisteningto.com
       http:
@@ -21,5 +25,25 @@ spec:
             backend:
               service:
                 name: spotify-now-playing
+                port:
+                  number: 80
+    - host: whatishenrylisteningto.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: spotify-now-playing
+                port:
+                  number: 80
+    - host: henryfranco.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: henryfranco-dev
                 port:
                   number: 80
