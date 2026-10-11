@@ -722,6 +722,79 @@ function escapeHtml(input) {
     .replace(/'/g, "&#39;");
 }
 
+app.get("/henry-franco", (req, res) => {
+  res.send(`
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Henry Franco | Engineering Manager</title>
+  <meta name="description" content="Meet Henry Franco, Engineering Manager and creator of What Is Henry Listening To?, with interests in AWS, Kubernetes, automation, and music." />
+  <link rel="canonical" href="https://whatishenrylisteningto.com/henry-franco" />
+  <meta property="og:title" content="Henry Franco | Engineering Manager" />
+  <meta property="og:description" content="Engineering Manager, music enthusiast, and creator of What Is Henry Listening To?" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://whatishenrylisteningto.com/henry-franco" />
+  <meta name="twitter:card" content="summary" />
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ProfilePage",
+  "@id": "https://whatishenrylisteningto.com/henry-franco#profile",
+  "url": "https://whatishenrylisteningto.com/henry-franco",
+  "name": "About Henry Franco",
+  "mainEntity": {
+    "@type": "Person",
+    "@id": "https://whatishenrylisteningto.com/henry-franco#henry",
+    "name": "Henry Franco",
+    "jobTitle": "Engineering Manager",
+    "description": "Henry Franco is an Engineering Manager and the creator of What Is Henry Listening To?, a personal project that shares the music and podcasts he enjoys. He explores AWS, Kubernetes, and infrastructure automation through hands-on projects, combining his interest in technology with his love of music.",
+    "url": "https://whatishenrylisteningto.com/henry-franco",
+    "sameAs": [
+      "https://github.com/hgfranco",
+      "https://www.instagram.com/hgfranco/"
+    ]
+  }
+}
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; background:#F7F5F2; color:#2B2B2B; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; line-height:1.65; }
+    main { max-width:760px; margin:0 auto; padding:40px 20px; }
+    .card { background:#fff; padding:28px; border:1px solid rgba(43,43,43,.12); border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,.06); }
+    h1 { margin:0; font-size:clamp(30px,6vw,42px); line-height:1.2; }
+    h2 { font-size:22px; }
+    .role { margin-top:8px; color:#555; }
+    a { color:#146B36; text-underline-offset:3px; }
+    a:focus-visible { outline:3px solid #146B36; outline-offset:4px; }
+    nav { margin-top:24px; }
+    nav ul { display:flex; flex-wrap:wrap; gap:12px 24px; list-style:none; padding:0; }
+  </style>
+</head>
+<body>
+  <main>
+    <article class="card">
+      <h1>Henry Franco</h1>
+      <p class="role">Engineering Manager</p>
+      <p>Henry Franco is an Engineering Manager and the creator of What Is Henry Listening To?, a personal project that shares the music and podcasts he enjoys. He explores AWS, Kubernetes, and infrastructure automation through hands-on projects, combining his interest in technology with his love of music.</p>
+      <h2>What Is Henry Listening To?</h2>
+      <p>This project brings my music and technology interests together. It shares my current Spotify listening activity, recent music and podcasts, and a map of artist origins.</p>
+      <p>I use the project to explore running an application on AWS and Kubernetes, with infrastructure managed through Terraform and configuration automated through Ansible.</p>
+      <nav aria-label="Henry Franco’s public profiles">
+        <ul>
+          <li><a href="https://github.com/hgfranco">GitHub</a></li>
+          <li><a href="https://www.instagram.com/hgfranco/">Instagram</a></li>
+        </ul>
+      </nav>
+      <p><a href="/">See what Henry is listening to</a></p>
+    </article>
+  </main>
+</body>
+</html>
+`);
+});
+
 app.get("/", (req, res) => {
   let previewTitle = "What is Henry listening to?";
   let previewDesc = "Live music and podcasts Henry is into right now.";
@@ -902,7 +975,7 @@ app.get("/", (req, res) => {
 
     <p class="hint" style="text-align:center;">Auto-refreshes every 10 seconds.</p>
     <footer style="margin-top:24px;text-align:center;color:rgba(43,43,43,0.55);font-size:13px;">
-      Made with ♥ by Henry Franco
+      Made with ♥ by <a href="/henry-franco">Henry Franco</a> · <a href="/henry-franco">About Henry</a>
     </footer>
   </div>
 
@@ -1127,6 +1200,7 @@ app.get("/sitemap.xml", (req, res) => {
   res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://whatishenrylisteningto.com/</loc></url>
+  <url><loc>https://whatishenrylisteningto.com/henry-franco</loc></url>
 </urlset>
 `);
 });
