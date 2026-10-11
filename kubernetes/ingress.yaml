@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spotify-now-playing
+  namespace: spotify-now-playing
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: instance
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:643593783040:certificate/4b17dd12-5d84-4a56-9c65-8f6a550c0249
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-path: /api/status
+spec:
+  ingressClassName: alb
+  rules:
+    - host: k8s.whatishenrylisteningto.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: spotify-now-playing
+                port:
+                  number: 80
