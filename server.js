@@ -766,10 +766,12 @@ app.get("/", (req, res) => {
 
   res.send(`
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${previewTitle}</title>
+  <title>Henry Franco | What Is Henry Listening To?</title>
+  <meta name="description" content="Discover the music and podcasts Henry Franco is listening to, with live Spotify updates and recent favorites." />
+  <link rel="canonical" href="https://whatishenrylisteningto.com/" />
   <meta property="og:title" content="${escapeHtml(previewTitle)}" />
   <meta property="og:description" content="${escapeHtml(previewDesc)}" />
   <meta property="og:type" content="website" />
@@ -851,6 +853,8 @@ app.get("/", (req, res) => {
     .hint { margin:14px 0 0; color:var(--muted); font-size:13px; }
     .site-header { display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:18px; }
     .logo { max-width:520px; width:100%; height:auto; }
+    .site-header .creator-heading { font-size:18px; text-align:center; }
+    .creator-intro { margin:0; max-width:600px; text-align:center; color:var(--muted); font-size:14px; line-height:1.5; }
     @media (max-width:600px){.logo{max-width:92%}}
     .journal-rule { width:100%; max-width:900px; height:1px; background:linear-gradient(to right,transparent,rgba(43,43,43,.22),transparent); margin:10px 0 6px; }
     .meta { margin-top:6px; font-size:13px; color:rgba(43,43,43,.58); }
@@ -873,6 +877,8 @@ app.get("/", (req, res) => {
   <div class="wrap">
     <header class="site-header">
       <img src="/logo.png" alt="What is Henry listening to?" class="logo" />
+      <h1 class="creator-heading">What Is Henry Franco Listening To?</h1>
+      <p class="creator-intro">A personal music project by Henry Franco. Explore the music and podcasts I’m listening to, updated live from Spotify.</p>
       <div class="journal-rule"></div>
       <p class="tagline" id="hero">Checking in on Henry’s current vibe…</p>
     </header>
@@ -1095,10 +1101,10 @@ app.get("/", (req, res) => {
       const isLive = data.music.is_playing || data.podcast.is_playing;
       if (isLive) {
         hero.textContent = "You caught Henry mid-listen — live right now.";
-        document.title = "▶ Henry is listening…";
+        document.title = "Henry Franco | What Is Henry Listening To?";
       } else {
         hero.textContent = "Henry’s not listening at the moment. Here’s his most recent vibe.";
-        document.title = "What is Henry listening to?";
+        document.title = "Henry Franco | What Is Henry Listening To?";
       }
     }
 
@@ -1109,6 +1115,19 @@ app.get("/", (req, res) => {
   </script>
 </body>
 </html>
+`);
+});
+
+// Discovery files use the public canonical hostname, including on alternate hosts.
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain").send("User-agent: *\nAllow: /\nSitemap: https://whatishenrylisteningto.com/sitemap.xml\n");
+});
+
+app.get("/sitemap.xml", (req, res) => {
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://whatishenrylisteningto.com/</loc></url>
+</urlset>
 `);
 });
 
