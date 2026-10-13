@@ -847,6 +847,7 @@ app.get("/", (req, res) => {
     .name { margin:0 0 4px; font-size:16px; font-weight:850; line-height:1.2; }
     .who { margin:0; color:rgba(43,43,43,.72); font-size:13px; line-height:1.3; }
     a { color:var(--accent); text-decoration:none; font-weight:800; display:inline-block; padding:8px 0; }
+    .footer-credit-link { color:inherit; font-weight:inherit; padding:0; text-decoration:underline; text-underline-offset:3px; }
     .empty { margin:0; color:var(--muted); font-size:14px; line-height:1.35; }
     .hint { margin:14px 0 0; color:var(--muted); font-size:13px; }
     .site-header { display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:18px; }
@@ -896,7 +897,7 @@ app.get("/", (req, res) => {
 
     <p class="hint" style="text-align:center;">Auto-refreshes every 10 seconds.</p>
     <footer style="margin-top:24px;text-align:center;color:rgba(43,43,43,0.55);font-size:13px;">
-      Made with ♥ by Henry Franco
+      Made with ♥ by <a class="footer-credit-link" href="https://henryfranco.com">Henry Franco</a>
     </footer>
   </div>
 
